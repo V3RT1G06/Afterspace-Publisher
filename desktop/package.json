@@ -1,6 +1,6 @@
 {
   "name": "afterspace-chat",
-  "version": "8.0.1",
+  "version": "8.0.2",
   "description": "Afterspace desktop chat app",
   "main": "main.js",
   "author": "V3RT1G06",
@@ -22,6 +22,7 @@
       "main.js",
       "preload.js",
       "package.json",
+      "build/icon.png",
       "app/Afterspace V8.html"
     ],
     "extraResources": [
