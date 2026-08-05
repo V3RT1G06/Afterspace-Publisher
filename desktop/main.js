@@ -12,7 +12,15 @@ app.setAppUserModelId('com.afterspace.chat')
 const FIREBASE_DB   = 'https://as-superchat-default-rtdb.firebaseio.com'
 const HTML_UPD_URL  = `${FIREBASE_DB}/htmlUpdate.json`
 const GITHUB_RELEASE_URL = 'https://api.github.com/repos/V3RT1G06/Afterspace-Publisher/releases/latest'
-const UPDATER_USER_AGENT = 'Afterspace-Updater/8.0.1'
+const UPDATER_USER_AGENT = 'Afterspace-Updater/8.0.2'
+
+const TITLEBAR_LOGO_DATA = (() => {
+  try {
+    return `data:image/png;base64,${fs.readFileSync(path.join(__dirname, 'build', 'icon.png')).toString('base64')}`
+  } catch {
+    return ''
+  }
+})()
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function isNewer(remote, local) {
@@ -248,7 +256,7 @@ const TB_CSS = `
   background: #000;
   border-bottom: 1px solid rgba(255,255,255,.06);
   user-select: none; box-sizing: border-box;
-  font-family: 'Nova Cut', cursive;
+  font-family: 'Special Elite', cursive;
 }
 #nu-tb-logo {
   width: 22px; height: 22px; border-radius: 7px;
@@ -257,16 +265,16 @@ const TB_CSS = `
 }
 #nu-tb-badge {
   width: 22px; height: 22px; border-radius: 7px;
-  background: linear-gradient(135deg,#5865f2,#7b4fe8);
+  background: #050505;
   display: flex; align-items: center; justify-content: center;
   font-size: 8px; color: #fff;
-  font-family: 'Nova Cut', cursive;
+  font-family: 'Special Elite', cursive;
   margin-left: 12px; flex-shrink: 0; pointer-events: none;
   letter-spacing: .05em;
 }
 #nu-tb-name {
   margin-left: 9px;
-  font-family: 'Nova Cut', cursive;
+  font-family: 'Special Elite', cursive;
   font-size: 13px;
   color: rgba(255,255,255,.55);
   letter-spacing: .1em;
@@ -298,11 +306,10 @@ const TB_JS = `(function(){
   var bar = document.createElement('div');
   bar.id = 'nu-titlebar';
 
-  // Reuse the logo already embedded in the page
-  var srcEl = document.querySelector('#serverHomeBtn img');
-  if (srcEl && srcEl.src) {
+  var embeddedLogo = ${JSON.stringify(TITLEBAR_LOGO_DATA)};
+  if (embeddedLogo) {
     var img = document.createElement('img');
-    img.id = 'nu-tb-logo'; img.src = srcEl.src; img.alt = 'AS';
+    img.id = 'nu-tb-logo'; img.src = embeddedLogo; img.alt = 'Afterspace';
     bar.appendChild(img);
   } else {
     var badge = document.createElement('div');
