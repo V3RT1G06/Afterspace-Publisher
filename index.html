@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Afterspace Publisher</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Special+Elite&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box} :root{color-scheme:dark;--line:#2b2b2b;--muted:#999}
+    body{margin:0;min-height:100vh;background:#000;color:#fff;font-family:'Special Elite',cursive;display:grid;place-items:center;padding:28px}
+    main{width:min(620px,100%);border:1px solid var(--line);border-radius:18px;background:#0b0b0b;box-shadow:0 30px 100px #000;padding:32px}
+    header{display:flex;align-items:center;gap:16px;border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:24px}
+    .mark{width:52px;height:52px;border:1px solid #444;border-radius:50%;display:grid;place-items:center;font-size:22px}
+    h1{font-size:24px;margin:0 0 5px}.sub,.hint{color:var(--muted);line-height:1.6}.sub{font-size:13px;margin:0}
+    label{display:block;font-size:12px;letter-spacing:.08em;margin:17px 0 7px;color:#bbb}
+    input,textarea,button{font:inherit} input,textarea{width:100%;background:#050505;color:#fff;border:1px solid #333;border-radius:9px;padding:12px}
+    textarea{min-height:82px;resize:vertical} input:focus,textarea:focus{outline:1px solid #fff}
+    input[type=file]{padding:22px;border-style:dashed}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    button{width:100%;margin-top:20px;padding:13px;border-radius:9px;border:1px solid #fff;background:#fff;color:#000;cursor:pointer}
+    button.secondary{background:#090909;color:#fff;border-color:#333}button:disabled{opacity:.45;cursor:not-allowed}
+    #publisher{display:none}.status{margin-top:18px;padding:13px;border-left:3px solid #777;background:#111;color:#bbb;white-space:pre-wrap;line-height:1.55}
+    .ok{border-color:#72ffb1;color:#72ffb1}.error{border-color:#ff6767;color:#ff8a8a}.hint{font-size:12px;margin:14px 0 0}
+    @media(max-width:560px){main{padding:22px}.row{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main>
+  <header><div class="mark">AS</div><div><h1>Afterspace Publisher</h1><p class="sub">Upload HTML. GitHub builds and releases the Windows EXE.</p></div></header>
+  <section id="login">
+    <label for="email">Firebase admin email</label><input id="email" type="email" autocomplete="username">
+    <label for="password">Password</label><input id="password" type="password" autocomplete="current-password">
+    <button id="signIn">Sign in</button>
+  </section>
+  <section id="publisher">
+    <div class="row"><div><label for="version">App version</label><input id="version" placeholder="8.0.2" pattern="\d+(\.\d+){1,3}"></div><div><label>Signed in</label><button id="signOut" class="secondary" type="button">Sign out</button></div></div>
+    <label for="htmlFile">Afterspace HTML file</label><input id="htmlFile" type="file" accept=".html,text/html">
+    <label for="notes">Release notes</label><textarea id="notes" placeholder="What changed in this release?"></textarea>
+    <button id="publish" disabled>Upload and build EXE</button>
+    <p class="hint">The HTML update is published immediately. GitHub checks the build queue every five minutes, creates the portable EXE, and makes it the latest single-file release.</p>
+  </section>
+  <div id="status" class="status">Ready.</div>
+</main>
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import {getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import {getStorage,ref as storageRef,uploadBytes,getDownloadURL} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
+import {getDatabase,ref as databaseRef,set} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+
+const config={apiKey:'AIzaSyB6adKgbFuYP5ekrLUUJSshjZ0NuS7OPwg',authDomain:'as-superchat.firebaseapp.com',databaseURL:'https://as-superchat-default-rtdb.firebaseio.com',projectId:'as-superchat',storageBucket:'as-superchat.firebasestorage.app',messagingSenderId:'142659193054',appId:'1:142659193054:web:a3f34f8ded3a8e99c49a4f'};
+const firebaseApp=initializeApp(config),auth=getAuth(firebaseApp),storage=getStorage(firebaseApp),database=getDatabase(firebaseApp);
+const byId=id=>document.getElementById(id),status=byId('status');
+function setStatus(message,type=''){status.textContent=message;status.className=`status ${type}`}
+function valid(){const file=byId('htmlFile').files[0];byId('publish').disabled=!(file&&/^\d+(\.\d+){1,3}$/.test(byId('version').value.trim()))}
+byId('version').addEventListener('input',valid);byId('htmlFile').addEventListener('change',valid);
+byId('signIn').addEventListener('click',async()=>{try{setStatus('Signing in…');await signInWithEmailAndPassword(auth,byId('email').value.trim(),byId('password').value);setStatus('Signed in.','ok')}catch(error){setStatus(error.message,'error')}});
+byId('password').addEventListener('keydown',event=>{if(event.key==='Enter')byId('signIn').click()});
+byId('signOut').addEventListener('click',()=>signOut(auth));
+onAuthStateChanged(auth,user=>{byId('login').style.display=user?'none':'block';byId('publisher').style.display=user?'block':'none';if(!user)setStatus('Sign in with an authorized Firebase account.')});
+byId('publish').addEventListener('click',async()=>{
+  const user=auth.currentUser,file=byId('htmlFile').files[0],version=byId('version').value.trim(),notes=byId('notes').value.trim();
+  if(!user||!file||!/^\d+(\.\d+){1,3}$/.test(version))return setStatus('Choose an HTML file and enter a valid version.','error');
+  const text=await file.text();if(!/<!doctype html/i.test(text)||!/Afterspace/i.test(text))return setStatus('That does not look like a valid Afterspace HTML file.','error');
+  byId('publish').disabled=true;
+  try{
+    setStatus('Computing SHA-256 and uploading HTML…');
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));
+    const hash=[...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
+    const uploaded=await uploadBytes(storageRef(storage,`app-updates/builds/Afterspace-${version}.html`),file,{contentType:'text/html'});
+    const url=await getDownloadURL(uploaded.ref),timestamp=Date.now();
+    await set(databaseRef(database,'htmlUpdate'),{version,url,sha256:hash,notes:notes||null,timestamp});
+    await set(databaseRef(database,'releaseBuildRequest'),{version,url,sha256:hash,notes:notes||null,timestamp,requestedBy:user.email});
+    setStatus(`Queued Afterspace ${version}.\nHTML users update immediately; the GitHub EXE release should appear within about five minutes.`,'ok');
+  }catch(error){setStatus(`Publish failed: ${error.message}`,'error');byId('publish').disabled=false}
+});
+</script>
+</body>
+</html>

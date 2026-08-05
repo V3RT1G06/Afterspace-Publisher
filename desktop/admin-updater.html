@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Afterspace Admin Updater</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:      #0d0d0d; --surface: #161616; --surface2: #1c1c1c;
+    --border:  rgba(255,255,255,.07);
+    --accent:  #5865f2; --accent2: #7b4fe8;
+    --text:    #e2e2e2; --muted:   rgba(255,255,255,.38);
+    --success: #3ba55c; --error:   #ed4245;
+    --radius:  10px;
+  }
+  body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif;
+         font-size:14px; min-height:100vh; display:flex; align-items:center;
+         justify-content:center; padding:24px; }
+  .card { width:100%; max-width:500px; background:var(--surface);
+          border:1px solid var(--border); border-radius:16px; overflow:hidden;
+          box-shadow:0 24px 64px rgba(0,0,0,.6); }
+
+  /* header */
+  .card-header { padding:20px 26px 16px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; gap:14px;
+    background:linear-gradient(135deg,rgba(88,101,242,.12),rgba(123,79,232,.08)); }
+  .logo { width:36px; height:36px; border-radius:9px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px; font-weight:700; color:#fff; flex-shrink:0;
+    font-family:'Nova Cut',cursive,'Segoe UI'; letter-spacing:.05em; }
+  .header-text h1 { font-size:14px; font-weight:600; }
+  .header-text p  { font-size:11px; color:var(--muted); margin-top:2px; }
+  .auth-badge { margin-left:auto; font-size:11px; padding:4px 10px; border-radius:20px;
+    background:rgba(255,255,255,.06); color:var(--muted); border:1px solid var(--border);
+    white-space:nowrap; display:flex; align-items:center; gap:5px; flex-shrink:0; }
+  .auth-badge.signed-in { color:var(--success); border-color:rgba(59,165,92,.3);
+    background:rgba(59,165,92,.08); }
+  .dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+
+  /* tabs */
+  .tabs { display:flex; border-bottom:1px solid var(--border); }
+  .tab-btn { flex:1; padding:11px 0; background:none; border:none; cursor:pointer;
+    font-size:12px; font-weight:600; letter-spacing:.04em; color:var(--muted);
+    border-bottom:2px solid transparent; transition:color .15s, border-color .15s;
+    font-family:inherit; }
+  .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .tab-btn:hover:not(.active) { color:var(--text); }
+
+  /* body */
+  .card-body { padding:22px 26px; }
+  .section { display:none; }
+  .section.active { display:block; }
+
+  /* form */
+  label { display:block; font-size:11px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--muted); margin-bottom:6px; }
+  input[type="email"], input[type="password"], input[type="text"], textarea {
+    width:100%; background:rgba(255,255,255,.04); border:1px solid var(--border);
+    border-radius:var(--radius); color:var(--text); font-size:13px;
+    padding:10px 12px; outline:none; transition:border-color .15s; font-family:inherit; }
+  input:focus, textarea:focus { border-color:var(--accent); background:rgba(88,101,242,.05); }
+  textarea { resize:vertical; min-height:68px; }
+  .field { margin-bottom:16px; }
+
+  /* dropzone */
+  .dropzone { border:2px dashed var(--border); border-radius:var(--radius); padding:24px 20px;
+    text-align:center; cursor:pointer; transition:border-color .15s,background .15s;
+    position:relative; }
+  .dropzone:hover, .dropzone.drag-over { border-color:var(--accent); background:rgba(88,101,242,.05); }
+  .dropzone input[type="file"] { position:absolute; inset:0; width:100%; height:100%;
+    opacity:0; cursor:pointer; }
+  .dropzone-icon { font-size:24px; margin-bottom:6px; }
+  .dropzone-label { font-size:13px; color:var(--muted); }
+  .dropzone-label strong { color:var(--accent); }
+  .dropzone-file { margin-top:8px; font-size:12px; color:var(--text);
+    background:rgba(88,101,242,.12); border-radius:6px; padding:4px 10px;
+    display:inline-block; }
+
+  /* progress */
+  .progress-wrap { margin-top:14px; background:rgba(255,255,255,.06); border-radius:4px;
+    height:4px; overflow:hidden; display:none; }
+  .progress-wrap.visible { display:block; }
+  .progress-bar { height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2));
+    border-radius:4px; transition:width .2s; width:0%; }
+  .progress-label { margin-top:5px; font-size:11px; color:var(--muted); text-align:center;
+    display:none; }
+  .progress-label.visible { display:block; }
+
+  /* buttons */
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:7px;
+    padding:10px 20px; border-radius:var(--radius); font-size:13px; font-weight:600;
+    cursor:pointer; border:none; outline:none; transition:opacity .15s,transform .1s;
+    font-family:inherit; width:100%; }
+  .btn:active { transform:scale(.98); }
+  .btn:disabled { opacity:.45; cursor:not-allowed; }
+  .btn-primary { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; }
+  .btn-primary:not(:disabled):hover { opacity:.9; }
+  .btn-ghost  { background:rgba(255,255,255,.06); color:var(--muted); border:1px solid var(--border); }
+  .btn-ghost:hover { background:rgba(255,255,255,.1); color:var(--text); }
+  .btn-danger { background:rgba(237,66,69,.12); color:var(--error); border:1px solid rgba(237,66,69,.2); }
+  .btn-danger:hover { background:rgba(237,66,69,.2); }
+  .btn-row { display:flex; gap:10px; margin-top:18px; }
+  .btn-row .btn { flex:1; }
+
+  /* version pill row */
+  .ver-row { display:flex; align-items:center; gap:8px; padding:9px 13px;
+    background:rgba(255,255,255,.03); border:1px solid var(--border);
+    border-radius:var(--radius); margin-bottom:18px; }
+  .ver-row .ver-label { font-size:11px; color:var(--muted); flex:1; }
+  .ver-pill { font-size:11px; font-weight:600; padding:3px 10px; border-radius:20px;
+    background:rgba(88,101,242,.15); color:var(--accent); border:1px solid rgba(88,101,242,.25); }
+
+  /* wrong-origin banner */
+  #wrongOriginBanner { display:none; position:fixed; inset:0; z-index:99999;
+    background:rgba(0,0,0,.92); align-items:center; justify-content:center; padding:32px; }
+  #wrongOriginBanner.show { display:flex; }
+  .wrong-origin-box { max-width:420px; background:#161616; border:1px solid rgba(237,66,69,.3);
+    border-radius:14px; padding:28px; text-align:center; }
+  .wrong-origin-box h2 { font-size:16px; color:#ed4245; margin-bottom:10px; }
+  .wrong-origin-box p  { font-size:13px; color:rgba(255,255,255,.55); line-height:1.6; margin-bottom:6px; }
+  .wrong-origin-box kbd { background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.2);
+    border-radius:4px; padding:2px 7px; font-size:12px; color:#fff; font-family:monospace; }
+
+  /* toast */
+  #toast { position:fixed; bottom:22px; left:50%; transform:translateX(-50%);
+    padding:9px 16px; border-radius:8px; font-size:13px; font-weight:500;
+    pointer-events:none; opacity:0; transition:opacity .25s; z-index:9999;
+    white-space:pre-wrap; max-width:min(520px,90vw); text-align:left; }
+  #toast.show { opacity:1; }
+  #toast.ok   { background:rgba(59,165,92,.18); border:1px solid rgba(59,165,92,.35); color:#3ba55c; }
+  #toast.err  { background:rgba(237,66,69,.18); border:1px solid rgba(237,66,69,.35); color:var(--error); }
+  #toast.info { background:rgba(88,101,242,.18); border:1px solid rgba(88,101,242,.35); color:#8b98ff; }
+</style>
+</head>
+<body>
+
+<div class="card">
+
+  <!-- ── Header ── -->
+  <div class="card-header">
+    <div class="logo">AS</div>
+    <div class="header-text">
+      <h1>Afterspace Admin Updater</h1>
+      <p>Push updates to all users via Firebase</p>
+    </div>
+    <div class="auth-badge" id="authBadge">
+      <div class="dot"></div>
+      <span id="authBadgeText">Not signed in</span>
+    </div>
+  </div>
+
+  <!-- ── Body ── -->
+  <div class="card-body">
+
+    <!-- Sign-in -->
+    <div class="section active" id="sectionLogin">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="email" placeholder="admin@example.com" autocomplete="username">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="password" placeholder="••••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary" id="btnSignIn">Sign In</button>
+    </div>
+
+    <!-- Tabs + upload panels (shown after sign-in) -->
+    <div class="section" id="sectionMain">
+
+      <!-- Tab bar -->
+      <div class="tabs" style="margin:-22px -26px 20px; padding:0 26px;">
+        <button class="tab-btn active" id="tabHtml"  data-target="panelHtml">📄  HTML Update</button>
+        <button class="tab-btn"        id="tabExe"   data-target="panelExe" >🖥  App Update</button>
+      </div>
+
+      <!-- ── Panel: HTML update ── -->
+      <div id="panelHtml">
+        <div class="ver-row">
+          <span class="ver-label">Live HTML version</span>
+          <span class="ver-pill" id="htmlVerPill">—</span>
+        </div>
+        <div class="field">
+          <label>New Version</label>
+          <input type="text" id="htmlVersion" placeholder="e.g. 22.1">
+        </div>
+        <div class="field">
+          <label>HTML File</label>
+          <div class="dropzone" id="htmlDropzone">
+            <input type="file" id="htmlFile" accept=".html">
+            <div class="dropzone-icon">📄</div>
+            <div class="dropzone-label"><strong>Choose file</strong> or drag &amp; drop</div>
+            <div class="dropzone-file" id="htmlFileName" style="display:none"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Release Notes <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+          <textarea id="htmlNotes" placeholder="What changed…"></textarea>
+        </div>
+        <div class="progress-wrap" id="htmlProgressWrap"><div class="progress-bar" id="htmlProgressBar"></div></div>
+        <div class="progress-label" id="htmlProgressLabel"></div>
+        <div class="btn-row">
+          <button class="btn btn-ghost btn-danger" id="btnSignOut">Sign Out</button>
+          <button class="btn btn-primary" id="btnHtmlUpload" disabled>⬆ Push HTML</button>
+        </div>
+      </div>
+
+      <!-- ── Panel: EXE update ── -->
+      <div id="panelExe" style="display:none">
+        <div class="ver-row">
+          <span class="ver-label">Live app version</span>
+          <span class="ver-pill" id="exeVerPill">—</span>
+        </div>
+        <div class="field">
+          <label>New Version</label>
+          <input type="text" id="exeVersion" placeholder="e.g. 22.1.0">
+        </div>
+        <div class="field">
+          <label>EXE File</label>
+          <div class="dropzone" id="exeDropzone">
+            <input type="file" id="exeFile" accept=".exe">
+            <div class="dropzone-icon">🖥</div>
+            <div class="dropzone-label"><strong>Choose file</strong> or drag &amp; drop</div>
+            <div class="dropzone-file" id="exeFileName" style="display:none"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Release Notes <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+          <textarea id="exeNotes" placeholder="What changed…"></textarea>
+        </div>
+        <div class="progress-wrap" id="exeProgressWrap"><div class="progress-bar" id="exeProgressBar"></div></div>
+        <div class="progress-label" id="exeProgressLabel"></div>
+        <div class="btn-row">
+          <button class="btn btn-ghost btn-danger" id="btnSignOut2">Sign Out</button>
+          <button class="btn btn-primary" id="btnExeUpload" disabled>⬆ Push App</button>
+        </div>
+      </div>
+
+    </div><!-- /sectionMain -->
+  </div>
+</div>
+
+<!-- Wrong-origin warning: shown when opened directly in a browser (file://) -->
+<div id="wrongOriginBanner">
+  <div class="wrong-origin-box">
+    <h2>⚠ Open via the App</h2>
+    <p>This page is running from a <strong>file://</strong> URL which blocks all Firebase Storage
+       uploads due to CORS policy (<code>origin: null</code>).</p>
+    <p style="margin-top:12px">Open it from inside <strong>Afterspace</strong> instead:</p>
+    <p style="margin-top:10px">
+      Press <kbd>Alt</kbd> to show the menu bar, then<br>
+      <kbd>App</kbd> → <kbd>Admin Updater</kbd><br>
+      or use the shortcut <kbd>Ctrl&nbsp;+&nbsp;Shift&nbsp;+&nbsp;A</kbd>
+    </p>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Detect file:// and warn immediately (before any Firebase SDK loads) -->
+<script>
+  // Only warn when opened in a regular browser via file:// — NOT when
+  // loaded inside the Electron app (loadFile also uses file:// but
+  // webSecurity:false means CORS is not an issue there).
+  if (location.protocol === 'file:' && !/Electron/.test(navigator.userAgent)) {
+    document.getElementById('wrongOriginBanner').classList.add('show')
+  }
+</script>
+
+<!-- Firebase SDK v10 modular -->
+<script type="module">
+import { initializeApp }                                         from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js'
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+                                                                 from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js'
+import { getStorage, ref as sRef, uploadBytes, getDownloadURL }  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js'
+import { getDatabase, ref as dbRef, set, get }                   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js'
+
+const firebaseConfig = {
+  apiKey:'AIzaSyB6adKgbFuYP5ekrLUUJSshjZ0NuS7OPwg', authDomain:'as-superchat.firebaseapp.com',
+  databaseURL:'https://as-superchat-default-rtdb.firebaseio.com', projectId:'as-superchat',
+  storageBucket:'as-superchat.firebasestorage.app', messagingSenderId:'142659193054',
+  appId:'1:142659193054:web:a3f34f8ded3a8e99c49a4f',
+}
+const fbApp   = initializeApp(firebaseConfig)
+const auth    = getAuth(fbApp)
+const storage = getStorage(fbApp)
+const db      = getDatabase(fbApp)
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const $  = id => document.getElementById(id)
+let toastT
+function toast(msg, type='info', ms=3500) {
+  const el=$('toast'); el.textContent=msg; el.className=`show ${type}`
+  clearTimeout(toastT); toastT=setTimeout(()=>{ el.className='' }, ms)
+}
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'))
+  $(id).classList.add('active')
+}
+function setProgress(wrapId, barId, labelId, pct, label) {
+  $(wrapId).classList.toggle('visible', pct>=0)
+  $(labelId).classList.toggle('visible', pct>=0)
+  $(barId).style.width = pct+'%'
+  $(labelId).textContent = label||''
+}
+
+async function doSignOut() {
+  await signOut(auth)
+  toast('Signed out','info')
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'))
+    btn.classList.add('active')
+    $('panelHtml').style.display = btn.dataset.target==='panelHtml' ? 'block' : 'none'
+    $('panelExe').style.display  = btn.dataset.target==='panelExe'  ? 'block' : 'none'
+  })
+})
+
+// ── Auth state ────────────────────────────────────────────────────────────────
+onAuthStateChanged(auth, async user => {
+  if (user) {
+    $('authBadge').className='auth-badge signed-in'
+    $('authBadgeText').textContent = user.email
+    showSection('sectionMain')
+    // load live versions
+    try {
+      const h = (await get(dbRef(db,'htmlUpdate'))).val()
+      $('htmlVerPill').textContent = h?.version ? `v${h.version}` : 'none'
+    } catch { $('htmlVerPill').textContent='?' }
+    try {
+      const e = (await get(dbRef(db,'appVersion'))).val()
+      $('exeVerPill').textContent = e?.version ? `v${e.version}` : 'none'
+    } catch { $('exeVerPill').textContent='?' }
+  } else {
+    $('authBadge').className='auth-badge'
+    $('authBadgeText').textContent='Not signed in'
+    showSection('sectionLogin')
+  }
+})
+
+// ── Sign in ───────────────────────────────────────────────────────────────────
+$('btnSignIn').addEventListener('click', async () => {
+  const e=$('email').value.trim(), p=$('password').value
+  if (!e||!p) { toast('Enter email and password','err'); return }
+  const btn=$('btnSignIn'); btn.disabled=true; btn.textContent='Signing in…'
+  try { await signInWithEmailAndPassword(auth,e,p); toast('Signed in','ok') }
+  catch(ex) { toast(ex.message||'Sign-in failed','err',5000) }
+  finally { btn.disabled=false; btn.textContent='Sign In' }
+})
+$('password').addEventListener('keydown', e=>{ if(e.key==='Enter') $('btnSignIn').click() })
+$('btnSignOut').addEventListener('click', doSignOut)
+$('btnSignOut2').addEventListener('click', doSignOut)
+
+// ── Generic upload + push ─────────────────────────────────────────────────────
+// Uses uploadBytes (one-shot SDK upload) instead of uploadBytesResumable.
+// uploadBytesResumable stalls silently at 0 % when opened from file:// because
+// the second leg of the resumable protocol hits storage.googleapis.com which
+// has a different CORS policy. uploadBytes stays entirely on the Firebase SDK
+// path and avoids that issue. No per-byte progress, but it completes reliably.
+async function uploadAndPush({ file, version, notes, storagePath, dbPath,
+    wrapId, barId, labelId, btnId, pilId }) {
+  const btn = $(btnId)
+  btn.disabled = true; btn.textContent = 'Uploading…'
+  setProgress(wrapId, barId, labelId, 0, 'Uploading — please wait…')
+
+  // Animate the bar while the upload runs so it doesn't look frozen.
+  // Ramps to 70 % then oscillates between 65–75 % so it never looks "stuck".
+  let _fakeT = null
+  let _fakePct = 0
+  let _fakeDir = 1
+  function startFakeProgress() {
+    _fakeT = setInterval(() => {
+      if (_fakePct < 65) {
+        _fakePct = Math.min(_fakePct + 3, 65)
+      } else {
+        _fakePct += _fakeDir * 1.5
+        if (_fakePct >= 75) _fakeDir = -1
+        if (_fakePct <= 65) _fakeDir = 1
+      }
+      setProgress(wrapId, barId, labelId, Math.round(_fakePct), 'Uploading — please wait…')
+    }, 250)
+  }
+  function stopFakeProgress() { clearInterval(_fakeT) }
+
+  try {
+    startFakeProgress()
+    const storageRef = sRef(storage, storagePath)
+
+    // Race against a 90-second timeout — if Storage rules are blocking the
+    // write, the SDK can hang silently instead of throwing immediately.
+    const snapshot = await Promise.race([
+      uploadBytes(storageRef, file),
+      new Promise((_, rej) => setTimeout(() =>
+        rej(Object.assign(new Error(
+          'Upload timed out.\n\nMost likely cause: Firebase Storage rules are denying the write.\n' +
+          'Go to console.firebase.google.com → Storage → Rules and add:\n\n' +
+          '  match /app-updates/{a=**} {\n' +
+          '    allow read: if true;\n' +
+          '    allow write: if request.auth != null;\n' +
+          '  }'
+        ), { code: 'storage/timeout' })), 90000)),
+    ])
+    stopFakeProgress()
+
+    setProgress(wrapId, barId, labelId, 90, 'Getting download URL…')
+    const dlURL = await getDownloadURL(snapshot.ref)
+
+    setProgress(wrapId, barId, labelId, 95, 'Writing update record…')
+    await set(dbRef(db, dbPath), { version, url: dlURL, notes: notes || null, timestamp: Date.now() })
+
+    setProgress(wrapId, barId, labelId, 100, `✓ Pushed v${version} — users will update on next launch`)
+    toast(`✓ Pushed v${version}`, 'ok', 5000)
+    $(pilId).textContent = `v${version}`
+    btn.textContent = btnId === 'btnHtmlUpload' ? '⬆ Push HTML' : '⬆ Push App'
+  } catch (ex) {
+    stopFakeProgress()
+    setProgress(wrapId, barId, labelId, -1)
+    // Translate Firebase storage error codes into plain English
+    const _storageErrors = {
+      'storage/unauthorized':    'Not allowed — your account does not have write permission to Firebase Storage.\nMake sure you are signed in with an admin account that has Storage write rules.',
+      'storage/unauthenticated': 'Not signed in — sign in first before uploading.',
+      'storage/quota-exceeded':  'Firebase Storage quota exceeded on this project.',
+      'storage/invalid-url':     'Invalid storage path — contact the developer.',
+      'storage/no-default-bucket': 'No Firebase Storage bucket configured for this project.',
+      'storage/timeout':         ex.message || 'Upload timed out — Firebase Storage rules may be blocking the write.',
+      'storage/unknown':         'Firebase Storage returned an unexpected response.\nThis usually means:\n• You are not signed in with an authorised account\n• Firebase Storage rules are denying the upload\n• The Firebase project has no Storage bucket set up',
+      'auth/network-request-failed': 'No internet connection.',
+    }
+    const msg = _storageErrors[ex.code] || ex.message || 'Unknown error'
+    toast(`Upload failed\n${msg}`, 'err', 15000)
+    console.error('Upload error:', ex.code, ex.message)
+    btn.disabled = false
+    btn.textContent = btnId === 'btnHtmlUpload' ? '⬆ Push HTML' : '⬆ Push App'
+  }
+}
+
+// ── HTML panel wiring ─────────────────────────────────────────────────────────
+let htmlSelectedFile = null
+
+function hookDropzone(dzId, inputId, nameId, btnId, versionId, accept) {
+  let sel = null
+  const dz=$(dzId), inp=$(inputId), nm=$(nameId), btn=$(btnId), ver=$(versionId)
+  function setFile(f) {
+    if (!f) return
+    if (accept==='.html' && !f.name.endsWith('.html')) { toast('Drop an .html file','err'); return }
+    if (accept==='.exe'  && !f.name.endsWith('.exe'))  { toast('Drop an .exe file','err'); return }
+    sel = f
+    if (dzId==='htmlDropzone') htmlSelectedFile=f; else exeSelectedFile=f
+    nm.textContent=`${f.name}  (${(f.size/1024/1024).toFixed(2)} MB)`
+    nm.style.display='inline-block'
+    btn.disabled=!ver.value.trim()
+  }
+  inp.addEventListener('change', e=>setFile(e.target.files[0]))
+  dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('drag-over') })
+  dz.addEventListener('dragleave', ()=>dz.classList.remove('drag-over'))
+  dz.addEventListener('drop', e=>{ e.preventDefault(); dz.classList.remove('drag-over'); setFile(e.dataTransfer.files[0]) })
+  ver.addEventListener('input', ()=>{ btn.disabled=!(ver.value.trim()&&(dzId==='htmlDropzone'?htmlSelectedFile:exeSelectedFile)) })
+}
+
+let exeSelectedFile = null
+hookDropzone('htmlDropzone','htmlFile','htmlFileName','btnHtmlUpload','htmlVersion','.html')
+hookDropzone('exeDropzone', 'exeFile', 'exeFileName', 'btnExeUpload', 'exeVersion', '.exe')
+
+$('btnHtmlUpload').addEventListener('click', () => {
+  const v=$('htmlVersion').value.trim()
+  if (!v)               { toast('Enter a version','err'); return }
+  if (!htmlSelectedFile){ toast('Choose an HTML file','err'); return }
+  uploadAndPush({
+    file:htmlSelectedFile, version:v, notes:$('htmlNotes').value.trim(),
+    storagePath:`app-updates/html/Afterspace V${v}.html`,
+    dbPath:'htmlUpdate',
+    wrapId:'htmlProgressWrap', barId:'htmlProgressBar', labelId:'htmlProgressLabel',
+    btnId:'btnHtmlUpload', pilId:'htmlVerPill',
+  })
+})
+
+$('btnExeUpload').addEventListener('click', () => {
+  const v=$('exeVersion').value.trim()
+  if (!v)              { toast('Enter a version','err'); return }
+  if (!exeSelectedFile){ toast('Choose an EXE file','err'); return }
+  uploadAndPush({
+    file:exeSelectedFile, version:v, notes:$('exeNotes').value.trim(),
+    storagePath:`app-updates/exe/Afterspace V${v}.exe`,
+    dbPath:'appVersion',
+    wrapId:'exeProgressWrap', barId:'exeProgressBar', labelId:'exeProgressLabel',
+    btnId:'btnExeUpload', pilId:'exeVerPill',
+  })
+})
+</script>
+</body>
+</html>

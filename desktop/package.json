@@ -1,0 +1,49 @@
+{
+  "name": "afterspace-chat",
+  "version": "8.0.1",
+  "description": "Afterspace desktop chat app",
+  "main": "main.js",
+  "author": "V3RT1G06",
+  "license": "UNLICENSED",
+  "scripts": {
+    "build:win": "electron-builder --win portable --x64"
+  },
+  "devDependencies": {
+    "electron": "43.3.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.afterspace.chat",
+    "productName": "Afterspace",
+    "artifactName": "Afterspace.exe",
+    "asar": true,
+    "compression": "normal",
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "app/Afterspace V8.html"
+    ],
+    "extraResources": [
+      {
+        "from": "admin-updater.html",
+        "to": "admin-updater.html"
+      },
+      {
+        "from": "auto-update.ps1",
+        "to": "auto-update.ps1"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "executableName": "Afterspace",
+      "requestedExecutionLevel": "asInvoker",
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    }
+  }
+}

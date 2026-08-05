@@ -1,0 +1,70 @@
+name: Build queued Afterspace release
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: afterspace-release-builder
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read authenticated Firebase upload request
+        id: request
+        run: |
+          $request = Invoke-RestMethod 'https://as-superchat-default-rtdb.firebaseio.com/releaseBuildRequest.json'
+          if (-not $request -or $request.error) {
+            'no_request=true' >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          if ([string]$request.version -notmatch '^\d+(\.\d+){1,3}$') { throw 'Invalid requested version.' }
+          if ([string]$request.url -notmatch '^https://firebasestorage\.googleapis\.com/') { throw 'Untrusted HTML download host.' }
+          "BUILD_VERSION=$($request.version)" >> $env:GITHUB_ENV
+          "HTML_URL<<AFTERSPACE_URL" >> $env:GITHUB_ENV
+          [string]$request.url >> $env:GITHUB_ENV
+          "AFTERSPACE_URL" >> $env:GITHUB_ENV
+          "EXPECTED_HTML_HASH=$($request.sha256)" >> $env:GITHUB_ENV
+          $notes = if ($request.notes) { [string]$request.notes } else { 'Afterspace app update.' }
+          Set-Content -LiteralPath release-notes.txt -Value $notes -Encoding UTF8
+          if (gh release view "v$($request.version)" --repo $env:GITHUB_REPOSITORY 2>$null) {
+            'already_exists=true' >> $env:GITHUB_OUTPUT
+          }
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/setup-node@v4
+        if: steps.request.outputs.already_exists != 'true' && steps.request.outputs.no_request != 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Download and validate uploaded HTML
+        if: steps.request.outputs.already_exists != 'true' && steps.request.outputs.no_request != 'true'
+        run: |
+          Invoke-WebRequest -Uri $env:HTML_URL -OutFile 'desktop/app/Afterspace V8.html'
+          $html = Get-Content -Raw -LiteralPath 'desktop/app/Afterspace V8.html'
+          if ($html -notmatch '<!doctype html' -or $html -notmatch 'Afterspace') { throw 'Uploaded file is not valid Afterspace HTML.' }
+          if ($env:EXPECTED_HTML_HASH -match '^[A-Fa-f0-9]{64}$') {
+            $actual = (Get-FileHash -LiteralPath 'desktop/app/Afterspace V8.html' -Algorithm SHA256).Hash
+            if ($actual -ne $env:EXPECTED_HTML_HASH) { throw 'Uploaded HTML hash does not match.' }
+          }
+      - name: Build portable Windows EXE
+        if: steps.request.outputs.already_exists != 'true' && steps.request.outputs.no_request != 'true'
+        working-directory: desktop
+        run: |
+          npm ci
+          npm version $env:BUILD_VERSION --no-git-tag-version --allow-same-version
+          npm run build:win
+          $info = (Get-Item -LiteralPath 'dist/Afterspace.exe').VersionInfo
+          if ($info.ProductName -notlike 'Afterspace*' -or $info.ProductVersion -notlike "$env:BUILD_VERSION*") { throw 'Built EXE metadata is invalid.' }
+      - name: Publish single-file release
+        if: steps.request.outputs.already_exists != 'true' && steps.request.outputs.no_request != 'true'
+        run: gh release create "v$env:BUILD_VERSION" 'desktop/dist/Afterspace.exe' --repo $env:GITHUB_REPOSITORY --title "Afterspace $env:BUILD_VERSION" --notes-file release-notes.txt --latest
+        env:
+          GH_TOKEN: ${{ github.token }}
