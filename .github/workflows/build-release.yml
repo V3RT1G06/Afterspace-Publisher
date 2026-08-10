@@ -25,11 +25,18 @@ jobs:
             exit 0
           }
           if ([string]$request.version -notmatch '^\d+(\.\d+){1,3}$') { throw 'Invalid requested version.' }
-          if ([string]$request.url -notmatch '^https://firebasestorage\.googleapis\.com/') { throw 'Untrusted HTML download host.' }
           "BUILD_VERSION=$($request.version)" >> $env:GITHUB_ENV
-          "HTML_URL<<AFTERSPACE_URL" >> $env:GITHUB_ENV
-          [string]$request.url >> $env:GITHUB_ENV
-          "AFTERSPACE_URL" >> $env:GITHUB_ENV
+          if ($request.storage -eq 'rtdb-gzip-chunks' -and $request.payloadPath -match '^[A-Za-z0-9_/-]+$') {
+            "HTML_STORAGE=rtdb-gzip-chunks" >> $env:GITHUB_ENV
+            "HTML_PAYLOAD_PATH=$($request.payloadPath)" >> $env:GITHUB_ENV
+          } elseif ([string]$request.url -match '^https://firebasestorage\.googleapis\.com/') {
+            "HTML_STORAGE=url" >> $env:GITHUB_ENV
+            "HTML_URL<<AFTERSPACE_URL" >> $env:GITHUB_ENV
+            [string]$request.url >> $env:GITHUB_ENV
+            "AFTERSPACE_URL" >> $env:GITHUB_ENV
+          } else {
+            throw 'Build request does not contain a trusted HTML source.'
+          }
           "EXPECTED_HTML_HASH=$($request.sha256)" >> $env:GITHUB_ENV
           $notes = if ($request.notes) { [string]$request.notes } else { 'Afterspace app update.' }
           Set-Content -LiteralPath release-notes.txt -Value $notes -Encoding UTF8
@@ -47,11 +54,34 @@ jobs:
       - name: Download and validate uploaded HTML
         if: steps.request.outputs.already_exists != 'true' && steps.request.outputs.no_request != 'true'
         run: |
-          Invoke-WebRequest -Uri $env:HTML_URL -OutFile 'desktop/app/Afterspace V8.html'
-          $html = Get-Content -Raw -LiteralPath 'desktop/app/Afterspace V8.html'
+          $destination = 'desktop/app/Afterspace V10.html'
+          if ($env:HTML_STORAGE -eq 'rtdb-gzip-chunks') {
+            $payloadUrl = "https://as-superchat-default-rtdb.firebaseio.com/$($env:HTML_PAYLOAD_PATH).json"
+            $payload = Invoke-RestMethod -Uri $payloadUrl
+            if (-not $payload -or -not $payload.chunks) { throw 'Realtime Database HTML payload is missing.' }
+            if ($payload.chunks -is [array]) {
+              $parts = @($payload.chunks | Where-Object { $_ -is [string] })
+            } else {
+              $parts = @($payload.chunks.PSObject.Properties | Sort-Object { [int]$_.Name } | ForEach-Object Value)
+            }
+            $packed = [Convert]::FromBase64String(($parts -join ''))
+            if ($payload.encoding -eq 'gzip-base64') {
+              $input = [IO.MemoryStream]::new($packed)
+              $gzip = [IO.Compression.GZipStream]::new($input, [IO.Compression.CompressionMode]::Decompress)
+              $output = [IO.File]::Create($destination)
+              try { $gzip.CopyTo($output) } finally { $output.Dispose(); $gzip.Dispose(); $input.Dispose() }
+            } elseif ($payload.encoding -eq 'base64') {
+              [IO.File]::WriteAllBytes($destination, $packed)
+            } else {
+              throw 'Unsupported Realtime Database payload encoding.'
+            }
+          } else {
+            Invoke-WebRequest -Uri $env:HTML_URL -OutFile $destination
+          }
+          $html = Get-Content -Raw -LiteralPath $destination
           if ($html -notmatch '<!doctype html' -or $html -notmatch 'Afterspace') { throw 'Uploaded file is not valid Afterspace HTML.' }
           if ($env:EXPECTED_HTML_HASH -match '^[A-Fa-f0-9]{64}$') {
-            $actual = (Get-FileHash -LiteralPath 'desktop/app/Afterspace V8.html' -Algorithm SHA256).Hash
+            $actual = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
             if ($actual -ne $env:EXPECTED_HTML_HASH) { throw 'Uploaded HTML hash does not match.' }
           }
       - name: Build portable Windows EXE
