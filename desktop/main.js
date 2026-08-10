@@ -4,6 +4,7 @@ const path = require('path')
 const https = require('https')
 const fs   = require('fs')
 const crypto = require('crypto')
+const zlib = require('zlib')
 
 // Set a stable AUMID immediately — must happen before app is ready.
 app.setAppUserModelId('com.afterspace.chat')
@@ -12,7 +13,7 @@ app.setAppUserModelId('com.afterspace.chat')
 const FIREBASE_DB   = 'https://as-superchat-default-rtdb.firebaseio.com'
 const HTML_UPD_URL  = `${FIREBASE_DB}/htmlUpdate.json`
 const GITHUB_RELEASE_URL = 'https://api.github.com/repos/V3RT1G06/Afterspace-Publisher/releases/latest'
-const UPDATER_USER_AGENT = 'Afterspace-Updater/8.0.2'
+const UPDATER_USER_AGENT = 'Afterspace-Updater/10.0.0'
 
 const TITLEBAR_LOGO_DATA = (() => {
   try {
@@ -114,20 +115,32 @@ function getHtmlPath() {
       if (/<!doctype html/i.test(head) && /Afterspace/i.test(head)) return cached
     } catch {}
   }
-  return path.join(__dirname, 'app', 'Afterspace V8.html')
+  return path.join(__dirname, 'app', 'Afterspace V10.html')
 }
 
 // ── HTML content auto-updater ─────────────────────────────────────────────────
 async function checkForHtmlUpdate(win) {
   try {
     const info = await fetchJSON(HTML_UPD_URL)
-    if (!info || info.error || !info.version || !info.url) return
+    const hasDatabasePayload = info?.storage === 'rtdb-gzip-chunks' && info?.payloadPath
+    if (!info || info.error || !info.version || (!info.url && !hasDatabasePayload)) return
 
     const currentVer = getCachedHtmlVersion()
     if (info.version === currentVer) return      // already on this version
 
     const tmpPath = cachedHtmlPath() + '.tmp'
-    await downloadToFile(info.url, tmpPath)
+    if (hasDatabasePayload) {
+      const payload = await fetchJSON(`${FIREBASE_DB}/${String(info.payloadPath).replace(/^\/+|\/+$/g, '')}.json`)
+      if (!payload || payload.error || !payload.chunks) throw new Error('HTML update payload is unavailable')
+      const orderedChunks = Array.isArray(payload.chunks)
+        ? payload.chunks.filter(chunk => typeof chunk === 'string')
+        : Object.keys(payload.chunks).sort((a,b)=>Number(a)-Number(b)).map(key=>payload.chunks[key])
+      const packed = Buffer.from(orderedChunks.join(''), 'base64')
+      const html = payload.encoding === 'gzip-base64' ? zlib.gunzipSync(packed) : packed
+      fs.writeFileSync(tmpPath, html)
+    } else {
+      await downloadToFile(info.url, tmpPath)
+    }
 
     const htmlHead = fs.readFileSync(tmpPath, 'utf8').slice(0, 12000)
     if (!/<!doctype html/i.test(htmlHead) || !/Afterspace/i.test(htmlHead)) {
