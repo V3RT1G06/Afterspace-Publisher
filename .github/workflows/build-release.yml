@@ -1,7 +1,7 @@
 name: Build queued Afterspace release
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 permissions:
   contents: write
@@ -15,11 +15,29 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Read authenticated Firebase upload request
         id: request
         run: |
-          $request = Invoke-RestMethod 'https://as-superchat-default-rtdb.firebaseio.com/releaseBuildRequest.json'
+          if (-not $env:FIREBASE_RELEASE_BUILDER_PASSWORD) {
+            throw 'FIREBASE_RELEASE_BUILDER_PASSWORD is not configured.'
+          }
+          $authBody = @{
+            email = 'afterspace-release-builder@networkunity.local'
+            password = $env:FIREBASE_RELEASE_BUILDER_PASSWORD
+            returnSecureToken = $true
+          } | ConvertTo-Json -Compress
+          $auth = Invoke-RestMethod `
+            -Method Post `
+            -Uri 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyB6adKgbFuYP5ekrLUUJSshjZ0NuS7OPwg' `
+            -ContentType 'application/json' `
+            -Body $authBody
+          if (-not $auth.idToken) { throw 'Firebase build authentication failed.' }
+          Write-Output "::add-mask::$($auth.idToken)"
+          "FIREBASE_ID_TOKEN=$($auth.idToken)" >> $env:GITHUB_ENV
+          $encodedToken = [Uri]::EscapeDataString([string]$auth.idToken)
+          $requestUri = "https://as-superchat-default-rtdb.firebaseio.com/releaseBuildRequest.json?auth=$encodedToken"
+          $request = Invoke-RestMethod -Uri $requestUri
           if (-not $request -or $request.error) {
             'no_request=true' >> $env:GITHUB_OUTPUT
             exit 0
@@ -48,7 +66,8 @@ jobs:
           }
         env:
           GH_TOKEN: ${{ github.token }}
-      - uses: actions/setup-node@v4
+          FIREBASE_RELEASE_BUILDER_PASSWORD: ${{ secrets.FIREBASE_RELEASE_BUILDER_PASSWORD }}
+      - uses: actions/setup-node@v5
         if: steps.request.outputs.already_exists != 'true' && steps.request.outputs.no_request != 'true'
         with:
           node-version: 22
@@ -60,7 +79,9 @@ jobs:
           $destination = 'desktop/app/Afterspace V10.html'
           if ($env:HTML_STORAGE -eq 'rtdb-gzip-chunks') {
             $payloadUrl = "https://as-superchat-default-rtdb.firebaseio.com/$($env:HTML_PAYLOAD_PATH).json"
-            $payload = Invoke-RestMethod -Uri $payloadUrl
+            if (-not $env:FIREBASE_ID_TOKEN) { throw 'Firebase build token is unavailable.' }
+            $encodedToken = [Uri]::EscapeDataString([string]$env:FIREBASE_ID_TOKEN)
+            $payload = Invoke-RestMethod -Uri "$payloadUrl?auth=$encodedToken"
             if (-not $payload -or -not $payload.chunks) { throw 'Realtime Database HTML payload is missing.' }
             if ($payload.chunks -is [array]) {
               $parts = @($payload.chunks | Where-Object { $_ -is [string] })
